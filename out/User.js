@@ -17,13 +17,16 @@ const userSchema = new mongoose_1.default.Schema({
         type: Number,
         default: 0,
     },
-    followers: {
+    followerCount: {
         type: Number,
         default: 0,
     },
     firstLogin: {
         type: Boolean,
         default: true
+    },
+    hash: {
+        type: String,
     }
 });
 const User = mongoose_1.default.model("User", userSchema);

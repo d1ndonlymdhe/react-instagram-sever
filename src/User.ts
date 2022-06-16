@@ -13,13 +13,16 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 0,
     },
-    followers: {
+    followerCount: {
         type: Number,
         default: 0,
     },
     firstLogin: {
         type: Boolean,
         default: true
+    },
+    hash: {
+        type: String,
     }
 })
 
