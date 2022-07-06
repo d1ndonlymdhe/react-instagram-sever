@@ -27,6 +27,10 @@ const userSchema = new mongoose_1.default.Schema({
     },
     hash: {
         type: String,
+    },
+    bio: {
+        type: String,
+        default: ""
     }
 });
 const User = mongoose_1.default.model("User", userSchema);

@@ -12,4 +12,5 @@ type user = {
     followersCount: number;
     firstLogin: boolean;
     hash: string;
+    _id: string;
 }

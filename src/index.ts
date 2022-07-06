@@ -5,12 +5,60 @@ import cors from "cors";
 import User from "./User";
 import cookieParser from "cookie-parser";
 import sum from "hash-sum";
+import fileUpload, { UploadedFile } from "express-fileupload";
+import fs from "fs";
+import { ApolloServer, gql } from 'apollo-server-express';
+// import User from "./Schema";
 mongoose.connect("mongodb://127.0.0.1:27017/instagram")
+
+const typeDefs = gql`
+type Query {
+    userFromUsername(username: String!): User,
+    userFromHash(hash: String!): User,
+}
+type User {
+    username: String,
+    password: String,
+    hash:String,
+    bio:String,
+    following: Int,
+    followersCount: Int,
+    firstLogin: Boolean,
+    _id: String,
+}
+`
+
+
+const resolvers = {
+    Query: {
+        //@ts-ignore
+        async userFromUsername(obj, args, context, info) {
+            const username = args.username;
+            console.log(username);
+            const user = await findUser(username);
+            return user;
+        },
+        //@ts-ignore
+        async userFromHash(obj, args, context, info) {
+            const hash = args.hash;
+            const user = await findUser(undefined, hash);
+            return user;
+        }
+    }
+}
 const app = express();
+const server = new ApolloServer({ typeDefs, resolvers });
+server.start().then(res => {
+    server.applyMiddleware({ app });
+    app.listen(PORT, () => {
+        console.log("listening on port " + PORT);
+    })
+})
 const PORT = process.env.port || 4000;
 app.use(bodyParser.json());
 app.use(cookieParser());
-const whiteList = ["http://localhost:3000", "http://127.0.0.1:300", "http://192.168.0.65:3000"];
+app.use(fileUpload());
+const whiteList = ["http://localhost:3000", "http://127.0.0.1:300", "http://192.168.100.65:3000", "http://localhost:4000", "*"];
 const corsOptions = {
     credentials: true,
     origin: function (origin: any, callback: any) {
@@ -22,9 +70,7 @@ const corsOptions = {
     }
 }
 app.use(cors(corsOptions))
-app.listen(PORT, () => {
-    console.log("listening on port " + PORT);
-})
+
 
 type messageType = {
     text: string;
@@ -32,8 +78,8 @@ type messageType = {
 }
 app.post("/userInfo", (req, res) => {
     const { hash } = <userInfoReq>req.body;
-    findUser(undefined, hash).then((user: user) => {
-        if (user !== null) {
+    findUser(undefined, hash).then((user) => {
+        if (user !== null && user !== undefined) {
             res.send(JSON.stringify({
                 status: "ok",
                 message: {
@@ -103,7 +149,12 @@ app.post("/signup", (req, res) => {
             message = {
                 text: "ok"
             }
-            newUser(username, password)
+            newUser(username, password).then(user => {
+                fs.mkdir(`./files/${user._id}`, (err) => {
+                    console.log(err);
+                });
+            })
+
         } else {
             status = "error";
             message = {
@@ -113,15 +164,48 @@ app.post("/signup", (req, res) => {
         res.send(JSON.stringify({ status, message }));
     })
 })
+
+app.post("/setProfile", (req, res) => {
+    if (req.files) {
+        // const fileStream = fs.createWriteStream()
+        const { hash, bio } = req.body;
+        const picture = <UploadedFile>req.files?.profilePicture
+        // const pictureName = picture.name;
+        const pictureBuffer = picture.data;
+        findUser(undefined, hash).then(user => {
+            if (user) {
+                const id = user._id;
+                const filePath = `./files/${id}/profilePicture.${getExtension(picture.name)}`;
+                fs.writeFile(filePath, pictureBuffer, (err) => {
+                    if (err) {
+                        console.log(err);
+                    }
+                })
+                updateUser(user.username, { bio: bio })
+                res.send("ok")
+            }
+        })
+        console.log(picture);
+    }
+})
+
 async function newUser(username: string, password: string) {
     const user = new User({ username: username, password: password });
     await user.save();
+    return user;
 }
+
 type updateUserOptionsType = {
-    following?: number, followersCount?: number, password?: string, newUsername?: string, hash?: string
+    following?: number;
+    followersCount?: number;
+    password?: string;
+    newUsername?: string;
+    hash?: string;
+    bio?: string;
 }
+
 async function updateUser(username: string, options: updateUserOptionsType) {
-    const { following, followersCount, password, newUsername, hash } = options
+    const { following, followersCount, password, newUsername, hash, bio } = options
     const user = await User.findOne({ username: username });
     if (following !== undefined) {
         user.following = following;
@@ -138,16 +222,24 @@ async function updateUser(username: string, options: updateUserOptionsType) {
     if (hash !== undefined) {
         user.hash = hash;
     }
+    if (bio !== undefined) {
+        user.bio = bio;
+    }
     await user.save()
 
 }
+
 async function findUser(username?: string, hash?: string) {
+    // console.log(username)
     if (username !== undefined) {
-        const user = await User.findOne({ username: username });
+        const user = await User.findOne({ username: username }) as user;
         return user;
     } else if (hash !== undefined) {
-        const user = await User.findOne({ hash: hash });
+        const user = await User.findOne({ hash: hash }) as user;
         return user;
     }
-
+}
+function getExtension(fileName: string) {
+    const splits = fileName.split(".");
+    return splits[splits.length - 1]
 }
